@@ -12,7 +12,7 @@
   "assuredworkloads": "0.4.0",
   "automl": "1.2.0",
   "bigquery": "1.28.0",
-  "bigtable": "1.13.0",
+  "bigtable": "1.14.0",
   "billing": "1.1.0",
   "binaryauthorization": "0.3.0",
   "channel": "1.4.0",
