@@ -3375,6 +3375,222 @@ func TestNullJson(t *testing.T) {
 	}
 }
 
+// TestTypedNullJSON tests the generic TypedNullJSON type
+func TestTypedNullJSON(t *testing.T) {
+	// Define test types
+	type User struct {
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+
+	type Product struct {
+		SKU   string  `json:"sku"`
+		Price float64 `json:"price"`
+		Stock int     `json:"stock"`
+	}
+
+	t.Run("Basic functionality", func(t *testing.T) {
+		// Test with valid value
+		user := User{ID: 123, Name: "Alice", Email: "alice@example.com"}
+		nullUser := TypedNullJSON[User]{Value: user, Valid: true}
+
+		if nullUser.IsNull() {
+			t.Error("Expected non-null value, but IsNull() returned true")
+		}
+
+		// Test with null value
+		nullUser2 := TypedNullJSON[User]{Valid: false}
+		if !nullUser2.IsNull() {
+			t.Error("Expected null value, but IsNull() returned false")
+		}
+	})
+
+	t.Run("String representation", func(t *testing.T) {
+		// Test valid value
+		product := Product{SKU: "PROD-001", Price: 29.99, Stock: 100}
+		nullProduct := TypedNullJSON[Product]{Value: product, Valid: true}
+		
+		str := nullProduct.String()
+		expected := `{"sku":"PROD-001","price":29.99,"stock":100}`
+		if str != expected {
+			t.Errorf("String() = %v, want %v", str, expected)
+		}
+
+		// Test null value
+		nullProduct2 := TypedNullJSON[Product]{Valid: false}
+		if nullProduct2.String() != nullString {
+			t.Errorf("String() for null = %v, want %v", nullProduct2.String(), nullString)
+		}
+	})
+
+	t.Run("MarshalJSON", func(t *testing.T) {
+		// Test with valid value
+		user := User{ID: 456, Name: "Bob", Email: "bob@example.com"}
+		nullUser := TypedNullJSON[User]{Value: user, Valid: true}
+		
+		data, err := nullUser.MarshalJSON()
+		if err != nil {
+			t.Fatalf("MarshalJSON failed: %v", err)
+		}
+		
+		expected := `{"id":456,"name":"Bob","email":"bob@example.com"}`
+		if string(data) != expected {
+			t.Errorf("MarshalJSON() = %v, want %v", string(data), expected)
+		}
+
+		// Test with null value
+		nullUser2 := TypedNullJSON[User]{Valid: false}
+		data2, err := nullUser2.MarshalJSON()
+		if err != nil {
+			t.Fatalf("MarshalJSON failed for null: %v", err)
+		}
+		if string(data2) != "null" {
+			t.Errorf("MarshalJSON() for null = %v, want null", string(data2))
+		}
+	})
+
+	t.Run("UnmarshalJSON", func(t *testing.T) {
+		// Test with valid JSON
+		jsonData := []byte(`{"sku":"PROD-002","price":49.99,"stock":50}`)
+		var nullProduct TypedNullJSON[Product]
+		
+		err := nullProduct.UnmarshalJSON(jsonData)
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed: %v", err)
+		}
+		
+		if !nullProduct.Valid {
+			t.Error("Expected Valid to be true after unmarshaling")
+		}
+		
+		if nullProduct.Value.SKU != "PROD-002" || nullProduct.Value.Price != 49.99 || nullProduct.Value.Stock != 50 {
+			t.Errorf("UnmarshalJSON result = %+v", nullProduct.Value)
+		}
+
+		// Test with null JSON
+		var nullProduct2 TypedNullJSON[Product]
+		err = nullProduct2.UnmarshalJSON([]byte("null"))
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed for null: %v", err)
+		}
+		
+		if nullProduct2.Valid {
+			t.Error("Expected Valid to be false after unmarshaling null")
+		}
+
+		// Test with invalid JSON
+		var nullProduct3 TypedNullJSON[Product]
+		err = nullProduct3.UnmarshalJSON([]byte("invalid json"))
+		if err == nil {
+			t.Error("Expected error for invalid JSON")
+		}
+
+		// Test with nil payload
+		var nullProduct4 TypedNullJSON[Product]
+		err = nullProduct4.UnmarshalJSON(nil)
+		if err == nil {
+			t.Error("Expected error for nil payload")
+		}
+	})
+
+	t.Run("Complex types", func(t *testing.T) {
+		// Test with nested structs
+		type Address struct {
+			Street  string `json:"street"`
+			City    string `json:"city"`
+			Country string `json:"country"`
+		}
+		
+		type Person struct {
+			Name    string  `json:"name"`
+			Age     int     `json:"age"`
+			Address Address `json:"address"`
+		}
+
+		person := Person{
+			Name: "Charlie",
+			Age:  30,
+			Address: Address{
+				Street:  "123 Main St",
+				City:    "New York",
+				Country: "USA",
+			},
+		}
+
+		nullPerson := TypedNullJSON[Person]{Value: person, Valid: true}
+		
+		// Marshal and unmarshal
+		data, err := nullPerson.MarshalJSON()
+		if err != nil {
+			t.Fatalf("MarshalJSON failed for complex type: %v", err)
+		}
+
+		var nullPerson2 TypedNullJSON[Person]
+		err = nullPerson2.UnmarshalJSON(data)
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed for complex type: %v", err)
+		}
+
+		if !nullPerson2.Valid || nullPerson2.Value.Name != person.Name || 
+			nullPerson2.Value.Address.City != person.Address.City {
+			t.Errorf("Round trip failed: got %+v", nullPerson2.Value)
+		}
+	})
+
+	t.Run("Array types", func(t *testing.T) {
+		// Test with array of structs
+		users := []User{
+			{ID: 1, Name: "User1", Email: "user1@example.com"},
+			{ID: 2, Name: "User2", Email: "user2@example.com"},
+		}
+
+		nullUsers := TypedNullJSON[[]User]{Value: users, Valid: true}
+		
+		data, err := nullUsers.MarshalJSON()
+		if err != nil {
+			t.Fatalf("MarshalJSON failed for array: %v", err)
+		}
+
+		var nullUsers2 TypedNullJSON[[]User]
+		err = nullUsers2.UnmarshalJSON(data)
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed for array: %v", err)
+		}
+
+		if !nullUsers2.Valid || len(nullUsers2.Value) != 2 {
+			t.Errorf("Array unmarshaling failed: got %+v", nullUsers2.Value)
+		}
+	})
+
+	t.Run("GormDataType", func(t *testing.T) {
+		nullUser := TypedNullJSON[User]{}
+		if nullUser.GormDataType() != "JSON" {
+			t.Errorf("GormDataType() = %v, want JSON", nullUser.GormDataType())
+		}
+	})
+
+	t.Run("Zero value behavior", func(t *testing.T) {
+		var nullInt TypedNullJSON[int]
+		err := nullInt.UnmarshalJSON([]byte("42"))
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed for int: %v", err)
+		}
+		if !nullInt.Valid || nullInt.Value != 42 {
+			t.Errorf("Expected Valid=true, Value=42, got Valid=%v, Value=%v", nullInt.Valid, nullInt.Value)
+		}
+
+		// Test unmarshaling null resets to zero value
+		err = nullInt.UnmarshalJSON([]byte("null"))
+		if err != nil {
+			t.Fatalf("UnmarshalJSON failed for null: %v", err)
+		}
+		if nullInt.Valid || nullInt.Value != 0 {
+			t.Errorf("Expected Valid=false, Value=0, got Valid=%v, Value=%v", nullInt.Valid, nullInt.Value)
+		}
+	})
+}
+
 // Test decode for PROTO type when custom type is a variant of a base type
 func TestDecodeProtoUsingBaseVariant(t *testing.T) {
 	// nullBytes is custom type from []byte base type.

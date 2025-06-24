@@ -1008,6 +1008,69 @@ func (n NullJSON) GormDataType() string {
 	return "JSON"
 }
 
+// TypedNullJSON represents a Cloud Spanner JSON that may be NULL with a specific type T.
+//
+// This generic type provides type safety when working with JSON columns in Cloud Spanner.
+// Use this instead of NullJSON when you want to ensure the JSON value conforms to a specific Go type.
+//
+// Example:
+//
+//	type User struct {
+//	    Name  string `json:"name"`
+//	    Email string `json:"email"`
+//	}
+//	var userJSON spanner.TypedNullJSON[User]
+type TypedNullJSON[T any] struct {
+	Value T    // Value contains the typed value when it is non-NULL
+	Valid bool // Valid is true if JSON is not NULL
+}
+
+// IsNull implements NullableValue.IsNull for TypedNullJSON.
+func (n TypedNullJSON[T]) IsNull() bool {
+	return !n.Valid
+}
+
+// String implements Stringer.String for TypedNullJSON.
+func (n TypedNullJSON[T]) String() string {
+	if !n.Valid {
+		return nullString
+	}
+	b, err := json.Marshal(n.Value)
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	return string(b)
+}
+
+// MarshalJSON implements json.Marshaler.MarshalJSON for TypedNullJSON.
+func (n TypedNullJSON[T]) MarshalJSON() ([]byte, error) {
+	return nulljson(n.Valid, n.Value)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.UnmarshalJSON for TypedNullJSON.
+func (n *TypedNullJSON[T]) UnmarshalJSON(payload []byte) error {
+	if payload == nil {
+		return errPayloadNil
+	}
+	if jsonIsNull(payload) {
+		n.Valid = false
+		var zero T
+		n.Value = zero
+		return nil
+	}
+	err := jsonUnmarshal(payload, &n.Value)
+	if err != nil {
+		return fmt.Errorf("payload cannot be converted to type %T: got %v, err: %w", n.Value, string(payload), err)
+	}
+	n.Valid = true
+	return nil
+}
+
+// GormDataType is used by gorm to determine the default data type for fields with this type.
+func (n TypedNullJSON[T]) GormDataType() string {
+	return "JSON"
+}
+
 // PGNumeric represents a Cloud Spanner PG Numeric that may be NULL.
 type PGNumeric struct {
 	Numeric string // Numeric contains the value when it is non-NULL, and an empty string when NULL.
